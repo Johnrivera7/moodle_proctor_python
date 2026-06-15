@@ -1,0 +1,14 @@
+[Unit]
+Description=Moodle Proctor Python face analysis worker
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+ExecStart=/usr/bin/python3 /opt/moodle_proctor_python/worker.py --storage /mnt/huawei-sfs/proctor
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
