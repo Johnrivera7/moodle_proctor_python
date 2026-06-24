@@ -15,9 +15,61 @@ Worker **independiente** para análisis facial (conteo de rostros en capturas). 
 | **Contacto** | [johnriveragonzalez7@gmail.com](mailto:johnriveragonzalez7@gmail.com) |
 | **Repositorio** | https://github.com/Johnrivera7/moodle_proctor_python |
 | **Rama** | **`MOODLE_52`** |
-| **Integración** | Cola JSON + `worker.json` generado por Moodle |
+| **Integración** | Cola JSON en disco + `worker.json` generado por Moodle |
 
 > Moodle 4.5: rama [`MOODLE_45`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_45)
+
+---
+
+## Cómo se integra (cola JSON en disco)
+
+**No hay API HTTP.** Moodle y Python se comunican solo con archivos en la **misma ruta montada** — da igual si es disco local, NFS, NAS u otro almacenamiento compartido.
+
+```mermaid
+flowchart LR
+    subgraph moodle [Moodle PHP]
+        CAP[Captura webcam]
+        ENQ[Encola job JSON]
+        CRON[Cron importa resultados]
+    end
+
+    subgraph storage [Disco compartido]
+        IMG[sessions/.../snap_N.jpg]
+        JOB[analysis_queue/job_N.json]
+        RES[analysis_results/result_N.json]
+    end
+
+    subgraph worker [Worker Python]
+        READ[Lee job]
+        CV[OpenCV face count]
+        WRITE[Escribe result]
+    end
+
+    CAP --> IMG
+    ENQ --> JOB
+    READ --> JOB
+    READ --> IMG
+    CV --> WRITE
+    WRITE --> RES
+    CRON --> RES
+```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as Moodle
+    participant D as Disco compartido
+    participant W as worker.py
+
+    M->>D: snap_0003.jpg + job_42.json
+    loop cada N segundos
+        W->>D: ¿Hay jobs pendientes?
+        W->>D: Lee imagen + detecta rostros
+        W->>D: result_42.json face_count alert
+    end
+    M->>D: Cron lee result_42.json
+    M->>M: Marca snapshot + incidencia multiple_faces
+```
 
 ---
 
@@ -26,10 +78,10 @@ Worker **independiente** para análisis facial (conteo de rostros en capturas). 
 | Escenario | Recomendación |
 |-----------|---------------|
 | **Un solo servidor Moodle** | ✅ Instalar **en el mismo servidor** (opción más simple) |
-| **Varios nodos web + NFS/SFS** | Instalar en **cualquier nodo** que monte la misma ruta |
+| **Varios nodos web + disco compartido** | Instalar en **cualquier nodo** que monte la misma ruta |
 | **Desarrollo local** | Misma máquina con `/tmp/moodle_proctor` |
 
-El worker **no expone puertos HTTP**. Lee/escribe archivos en la carpeta que Moodle configura. Puede convivir con Apache/Nginx/PHP-FPM en el mismo host.
+El worker **no expone puertos**. Lee/escribe archivos en la carpeta que Moodle configura.
 
 ---
 
@@ -63,8 +115,8 @@ El worker **no expone puertos HTTP**. Lee/escribe archivos en la carpeta que Moo
 | Python | 3.9+ |
 | OpenCV | `opencv-python-headless` ≥ 4.8 |
 | Moodle (suite) | **5.2+** con [`local_moodle_proctor`](https://github.com/Johnrivera7/moodle_proctor) **v1.4.1+** |
+| Disco compartido | Misma ruta resuelta que Moodle (lectura/escritura `www-data`) |
 | `worker.json` | Generado por Moodle al guardar ajustes |
-| Usuario del servicio | `www-data` con lectura/escritura en storage |
 
 ---
 
@@ -143,17 +195,6 @@ python worker.py --storage /tmp/moodle_proctor --once
 
 ---
 
-## Integración
-
-```
-Moodle guarda captura → storage/sessions/...
-Moodle encola job   → storage/analysis_queue/job_N.json
-Worker Python       → storage/analysis_results/result_N.json
-Cron Moodle         → importa alertas (0 / 1 / múltiples rostros)
-```
-
----
-
 ## Permisos
 
 ```bash
@@ -174,6 +215,8 @@ sudo chmod -R 750 /opt/moodle_proctor_python
 | [moodle_quizaccess_proctor](https://github.com/Johnrivera7/moodle_quizaccess_proctor/tree/MOODLE_52) | Capturas |
 | [moodle_block_proctor](https://github.com/Johnrivera7/moodle_block_proctor/tree/MOODLE_52) | Bloque |
 | [moodle_proctor_extension](https://github.com/Johnrivera7/moodle_proctor_extension/tree/MOODLE_52) | Extensión |
+
+Diagramas completos de arquitectura: [README del núcleo](https://github.com/Johnrivera7/moodle_proctor/blob/MOODLE_52/README.md).
 
 ---
 
