@@ -2,11 +2,11 @@
 """
 Moodle Proctor — face detection worker.
 
-Processes JSON job files from analysis_queue/ on shared storage (Huawei SFS).
+Processes JSON job files from analysis_queue/ on shared storage.
 Writes result JSON to analysis_results/ for Moodle scheduled task to import.
 
 Usage:
-  python worker.py --storage /mnt/huawei-sfs/proctor
+  python worker.py --storage /mnt/storage/campus.ejemplo.cl
   python analyze_faces.py --image /path/snap.jpg --output /path/result.json
 """
 from __future__ import annotations

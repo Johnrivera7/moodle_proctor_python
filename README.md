@@ -30,6 +30,16 @@ Worker **independiente** para análisis facial (conteo de rostros en capturas). 
 
 El worker **no expone puertos HTTP**. Solo lee/escribe archivos JSON e imágenes en la carpeta configurada en Moodle (**Storage path**). Por eso puede convivir en el mismo servidor sin conflictos con Apache/Nginx/PHP-FPM.
 
+### Ruta compartida (plugin + Python)
+
+| Componente | Configuración |
+|--------------|---------------|
+| **Plugin local** | Admin → Moodle Proctor → **Storage path** = `/mnt/storage/{moodlehost}` |
+| **Ruta resuelta** | Ej. sitio `https://campus.ejemplo.cl` → `/mnt/storage/campus.ejemplo.cl` |
+| **Worker Python** | `--storage /mnt/storage/campus.ejemplo.cl` (la **misma** ruta resuelta) |
+
+Moodle crea la subcarpeta del sitio automáticamente. Python **no** usa placeholders: copie la ruta exacta que muestra el estado del almacenamiento en ajustes del plugin.
+
 ---
 
 ## Requisitos
@@ -39,14 +49,14 @@ El worker **no expone puertos HTTP**. Solo lee/escribe archivos JSON e imágenes
 | Python | 3.9+ |
 | OpenCV | `opencv-python-headless` ≥ 4.8 |
 | Moodle (suite) | **5.2+** con [`local_moodle_proctor`](https://github.com/Johnrivera7/moodle_proctor) **v1.4.0+** |
-| Ruta de almacenamiento | **La misma ruta resuelta** que en Moodle (ej. `/mnt/proctoring/campus.ejemplo.cl`) |
+| Ruta de almacenamiento | **La misma ruta resuelta** que en Moodle (ej. `/mnt/storage/campus.ejemplo.cl`) |
 | Usuario del servicio | Debe poder **leer/escribir** esa ruta (`www-data` en Debian/Ubuntu) |
 
 ---
 
 ## Instalación en el mismo servidor que Moodle
 
-Supongamos Moodle instalado en `/var/www/moodle` y storage path configurado como `/mnt/proctoring/{moodlehost}`.
+Supongamos Moodle instalado en `/var/www/moodle` y storage path configurado como `/mnt/storage/{moodlehost}`.
 
 ### 1 · Clonar el worker
 
@@ -67,7 +77,7 @@ sudo ./venv/bin/pip install -r requirements.txt
 En **Administración → Plugins locales → Moodle Proctor** copie la **ruta resuelta** que muestra el estado del almacenamiento, por ejemplo:
 
 ```
-/mnt/proctoring/campus.ejemplo.cl
+/mnt/storage/campus.ejemplo.cl
 ```
 
 Debe ser **exactamente la misma** que usará el worker.
@@ -76,7 +86,7 @@ Debe ser **exactamente la misma** que usará el worker.
 
 ```bash
 # Sustituya STORAGE por su ruta resuelta
-STORAGE=/mnt/proctoring/campus.ejemplo.cl
+STORAGE=/mnt/storage/campus.ejemplo.cl
 
 sudo -u www-data /opt/moodle_proctor_python/venv/bin/python \
   /opt/moodle_proctor_python/worker.py --storage "$STORAGE" --once
@@ -103,7 +113,7 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
-ExecStart=/opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/proctoring/campus.ejemplo.cl
+ExecStart=/opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/storage/campus.ejemplo.cl
 Restart=always
 RestartSec=10
 
@@ -145,7 +155,7 @@ Si prefiere no usar systemd:
 
 ```bash
 # crontab -u www-data -e
-* * * * * /opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/proctoring/campus.ejemplo.cl --once
+* * * * * /opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/storage/campus.ejemplo.cl --once
 ```
 
 ---

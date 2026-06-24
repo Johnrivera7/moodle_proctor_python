@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
-ExecStart=/usr/bin/python3 /opt/moodle_proctor_python/worker.py --storage /mnt/huawei-sfs/proctor
+ExecStart=/opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/storage/campus.ejemplo.cl
 Restart=always
 RestartSec=10
 
