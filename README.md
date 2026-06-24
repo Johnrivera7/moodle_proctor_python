@@ -6,15 +6,29 @@
 [![Branch](https://img.shields.io/badge/Branch-MOODLE__52-green?style=flat-square)](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_52)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 
-Worker **independiente** para análisis facial. Compatible con **`local_moodle_proctor`** rama **MOODLE_52** (Moodle 5.2+ / PHP 8.5+ en el servidor Moodle).
+Worker **independiente** para análisis facial (conteo de rostros en capturas). Compatible con **`local_moodle_proctor`** rama **MOODLE_52** (Moodle 5.2+ / PHP 8.5+).
 
 | | |
 |---|---|
+| **Autor** | [John Rivera](https://github.com/Johnrivera7) |
+| **Contacto** | [johnriveragonzalez7@gmail.com](mailto:johnriveragonzalez7@gmail.com) |
 | **Repositorio** | https://github.com/Johnrivera7/moodle_proctor_python |
 | **Rama** | **`MOODLE_52`** |
-| **Integración** | Cola JSON en Huawei SFS |
+| **Integración** | Cola JSON en la misma ruta de almacenamiento que Moodle |
 
 > Moodle 4.5: rama [`MOODLE_45`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_45)
+
+---
+
+## ¿Dónde se instala?
+
+| Escenario | Recomendación |
+|-----------|---------------|
+| **Un solo servidor Moodle** | ✅ Instalar **en el mismo servidor** (opción más simple) |
+| **Varios nodos web + SFS/NFS** | Instalar en **cualquier nodo** que monte la misma ruta, o en el servidor de archivos |
+| **Desarrollo local** | Misma máquina que Herd/Valet/Docker con `/tmp/moodle_proctor` |
+
+El worker **no expone puertos HTTP**. Solo lee/escribe archivos JSON e imágenes en la carpeta configurada en Moodle (**Storage path**). Por eso puede convivir en el mismo servidor sin conflictos con Apache/Nginx/PHP-FPM.
 
 ---
 
@@ -24,38 +38,163 @@ Worker **independiente** para análisis facial. Compatible con **`local_moodle_p
 |-----------|---------|
 | Python | 3.9+ |
 | OpenCV | `opencv-python-headless` ≥ 4.8 |
-| Moodle (suite) | **5.2+** con rama MOODLE_52 |
-| SFS | Misma ruta que Storage path en Moodle |
+| Moodle (suite) | **5.2+** con [`local_moodle_proctor`](https://github.com/Johnrivera7/moodle_proctor) **v1.4.0+** |
+| Ruta de almacenamiento | **La misma ruta resuelta** que en Moodle (ej. `/mnt/proctoring/campus.ejemplo.cl`) |
+| Usuario del servicio | Debe poder **leer/escribir** esa ruta (`www-data` en Debian/Ubuntu) |
 
 ---
 
-## Instalación
+## Instalación en el mismo servidor que Moodle
+
+Supongamos Moodle instalado en `/var/www/moodle` y storage path configurado como `/mnt/proctoring/{moodlehost}`.
+
+### 1 · Clonar el worker
 
 ```bash
-git clone -b MOODLE_52 https://github.com/Johnrivera7/moodle_proctor_python.git /opt/moodle_proctor_python
+sudo git clone -b MOODLE_52 https://github.com/Johnrivera7/moodle_proctor_python.git /opt/moodle_proctor_python
 cd /opt/moodle_proctor_python
+```
+
+### 2 · Entorno virtual e dependencias
+
+```bash
+sudo python3 -m venv venv
+sudo ./venv/bin/pip install -r requirements.txt
+```
+
+### 3 · Obtener la ruta de almacenamiento de Moodle
+
+En **Administración → Plugins locales → Moodle Proctor** copie la **ruta resuelta** que muestra el estado del almacenamiento, por ejemplo:
+
+```
+/mnt/proctoring/campus.ejemplo.cl
+```
+
+Debe ser **exactamente la misma** que usará el worker.
+
+### 4 · Probar manualmente (mismo usuario que el servicio)
+
+```bash
+# Sustituya STORAGE por su ruta resuelta
+STORAGE=/mnt/proctoring/campus.ejemplo.cl
+
+sudo -u www-data /opt/moodle_proctor_python/venv/bin/python \
+  /opt/moodle_proctor_python/worker.py --storage "$STORAGE" --once
+```
+
+Si no hay trabajos en cola, termina sin error. Active en Moodle **Habilitar cola de análisis Python** y genere capturas en un quiz supervisado para probar.
+
+### 5 · Servicio systemd (mismo servidor, inicio automático)
+
+Edite el archivo de servicio antes de copiarlo — ajuste **ruta del venv** y **storage**:
+
+```bash
+sudo nano /opt/moodle_proctor_python/moodle-proctor-worker.service
+```
+
+Ejemplo para instalación en el mismo servidor:
+
+```ini
+[Unit]
+Description=Moodle Proctor Python face analysis worker
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+ExecStart=/opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/proctoring/campus.ejemplo.cl
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Activar:
+
+```bash
+sudo cp /opt/moodle_proctor_python/moodle-proctor-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now moodle-proctor-worker
+sudo systemctl status moodle-proctor-worker
+```
+
+Logs:
+
+```bash
+sudo journalctl -u moodle-proctor-worker -f
+```
+
+### 6 · Activar en Moodle
+
+**Administración → Plugins locales → Moodle Proctor**
+
+| Ajuste | Valor |
+|--------|-------|
+| **Habilitar cola de análisis Python** | Sí |
+| **Habilitar análisis facial** | Sí |
+
+El cron de Moodle importa resultados desde `analysis_results/` mediante la tarea programada del plugin.
+
+---
+
+## Instalación alternativa (cron cada minuto)
+
+Si prefiere no usar systemd:
+
+```bash
+# crontab -u www-data -e
+* * * * * /opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/proctoring/campus.ejemplo.cl --once
+```
+
+---
+
+## Desarrollo / prueba local
+
+```bash
+git clone -b MOODLE_52 https://github.com/Johnrivera7/moodle_proctor_python.git
+cd moodle_proctor_python
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+
+# Misma ruta que en admin Moodle (ej. /tmp/moodle_proctor)
+python worker.py --storage /tmp/moodle_proctor --once
 ```
 
 ---
 
-## Uso
+## Cómo funciona la integración
 
-```bash
-# Daemon
-python worker.py --storage /mnt/huawei-sfs/proctor
-
-# Cron
-python worker.py --storage /mnt/huawei-sfs/proctor --once
+```
+Moodle (captura webcam)
+       ↓
+Escribe imagen en storage/sessions/...
+       ↓
+Escribe job JSON en storage/analysis_queue/job_N.json
+       ↓
+Worker Python (mismo servidor o nodo con SFS)
+       ↓
+Detecta caras → storage/analysis_results/result_N.json
+       ↓
+Cron Moodle → importa alertas (0, 1 o múltiples rostros)
 ```
 
-### systemd
+---
+
+## Permisos recomendados
 
 ```bash
-sudo cp moodle-proctor-worker.service /etc/systemd/system/
-sudo systemctl enable --now moodle-proctor-worker
+# Ruta base (Moodle crea la subcarpeta del sitio)
+sudo chown -R www-data:www-data /mnt/proctoring
+sudo chmod -R 770 /mnt/proctoring
+
+# Código del worker
+sudo chown -R root:www-data /opt/moodle_proctor_python
+sudo chmod -R 750 /opt/moodle_proctor_python
 ```
+
+Tanto **PHP (Moodle)** como el **worker Python** deben ejecutarse como usuario con acceso de lectura/escritura a la misma carpeta de storage.
 
 ---
 
@@ -74,3 +213,8 @@ sudo systemctl enable --now moodle-proctor-worker
 ## Licencia
 
 GPL-3.0+ — [LICENSE](LICENSE)
+
+## Soporte
+
+- **Autor:** [John Rivera](https://github.com/Johnrivera7) · [johnriveragonzalez7@gmail.com](mailto:johnriveragonzalez7@gmail.com)
+- **Issues:** https://github.com/Johnrivera7/moodle_proctor_python/issues
