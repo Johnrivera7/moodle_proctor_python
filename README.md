@@ -30,15 +30,35 @@ Worker **independiente** para análisis facial (conteo de rostros en capturas). 
 
 El worker **no expone puertos HTTP**. Solo lee/escribe archivos JSON e imágenes en la carpeta configurada en Moodle (**Storage path**). Por eso puede convivir en el mismo servidor sin conflictos con Apache/Nginx/PHP-FPM.
 
-### Ruta compartida (plugin + Python)
+### Ruta compartida (plugin → Python automático)
 
-| Componente | Configuración |
-|--------------|---------------|
-| **Plugin local** | Admin → Moodle Proctor → **Storage path** = `/mnt/storage/{moodlehost}` |
-| **Ruta resuelta** | Ej. sitio `https://campus.ejemplo.cl` → `/mnt/storage/campus.ejemplo.cl` |
-| **Worker Python** | `--storage /mnt/storage/campus.ejemplo.cl` (la **misma** ruta resuelta) |
+| Paso | Quién | Qué pasa |
+|------|-------|----------|
+| 1 | **Admin Moodle** | Guarda **Storage path** = `/mnt/storage/{moodlehost}` |
+| 2 | **Plugin local** | Escribe `/var/lib/moodle_proctor/worker.json` con la ruta resuelta |
+| 3 | **Worker Python** | Lee ese JSON al iniciar — **sin `--storage` en systemd** |
 
-Moodle crea la subcarpeta del sitio automáticamente. Python **no** usa placeholders: copie la ruta exacta que muestra el estado del almacenamiento en ajustes del plugin.
+Ejemplo del JSON que genera Moodle:
+
+```json
+{
+  "storage": "/mnt/storage/campus.ejemplo.cl",
+  "storage_template": "/mnt/storage/{moodlehost}",
+  "wwwroot": "https://campus.ejemplo.cl",
+  "updated": 1719234567
+}
+```
+
+Prioridad en Python: `--storage` (override) → variable `MOODLE_PROCTOR_STORAGE` → `worker.json`.
+
+Preparación única del servidor:
+
+```bash
+sudo mkdir -p /var/lib/moodle_proctor /mnt/storage
+sudo chown www-data:www-data /var/lib/moodle_proctor /mnt/storage
+```
+
+Luego **guardar ajustes** en Moodle Proctor y arrancar el worker.
 
 ---
 
@@ -72,53 +92,27 @@ sudo python3 -m venv venv
 sudo ./venv/bin/pip install -r requirements.txt
 ```
 
-### 3 · Obtener la ruta de almacenamiento de Moodle
+### 3 · Generar config desde Moodle
 
-En **Administración → Plugins locales → Moodle Proctor** copie la **ruta resuelta** que muestra el estado del almacenamiento, por ejemplo:
+En **Administración → Plugins locales → Moodle Proctor**, guarde los ajustes de almacenamiento. El plugin escribe:
 
 ```
-/mnt/storage/campus.ejemplo.cl
+/var/lib/moodle_proctor/worker.json
 ```
 
-Debe ser **exactamente la misma** que usará el worker.
+Compruebe el bloque **Sincronización con Python** (debe mostrar ruta OK).
 
-### 4 · Probar manualmente (mismo usuario que el servicio)
+### 4 · Probar manualmente (sin --storage)
 
 ```bash
-# Sustituya STORAGE por su ruta resuelta
-STORAGE=/mnt/storage/campus.ejemplo.cl
-
 sudo -u www-data /opt/moodle_proctor_python/venv/bin/python \
-  /opt/moodle_proctor_python/worker.py --storage "$STORAGE" --once
+  /opt/moodle_proctor_python/worker.py --once
 ```
 
-Si no hay trabajos en cola, termina sin error. Active en Moodle **Habilitar cola de análisis Python** y genere capturas en un quiz supervisado para probar.
-
-### 5 · Servicio systemd (mismo servidor, inicio automático)
-
-Edite el archivo de servicio antes de copiarlo — ajuste **ruta del venv** y **storage**:
-
-```bash
-sudo nano /opt/moodle_proctor_python/moodle-proctor-worker.service
-```
-
-Ejemplo para instalación en el mismo servidor:
+### 5 · Servicio systemd (sin configurar ruta en Python)
 
 ```ini
-[Unit]
-Description=Moodle Proctor Python face analysis worker
-After=network.target
-
-[Service]
-Type=simple
-User=www-data
-Group=www-data
-ExecStart=/opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/storage/campus.ejemplo.cl
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
+ExecStart=/opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py
 ```
 
 Activar:
@@ -127,16 +121,9 @@ Activar:
 sudo cp /opt/moodle_proctor_python/moodle-proctor-worker.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now moodle-proctor-worker
-sudo systemctl status moodle-proctor-worker
 ```
 
-Logs:
-
-```bash
-sudo journalctl -u moodle-proctor-worker -f
-```
-
-### 6 · Activar en Moodle
+Override manual opcional: `--storage /ruta` o `MOODLE_PROCTOR_STORAGE=/ruta`.
 
 **Administración → Plugins locales → Moodle Proctor**
 
@@ -155,7 +142,7 @@ Si prefiere no usar systemd:
 
 ```bash
 # crontab -u www-data -e
-* * * * * /opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --storage /mnt/storage/campus.ejemplo.cl --once
+* * * * * /opt/moodle_proctor_python/venv/bin/python /opt/moodle_proctor_python/worker.py --once
 ```
 
 ---

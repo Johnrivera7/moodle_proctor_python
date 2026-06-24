@@ -5,7 +5,13 @@ Moodle Proctor — face detection worker.
 Processes JSON job files from analysis_queue/ on shared storage.
 Writes result JSON to analysis_results/ for Moodle scheduled task to import.
 
+Storage path resolution (first match wins):
+  1. --storage CLI argument (override)
+  2. MOODLE_PROCTOR_STORAGE environment variable
+  3. JSON file written by Moodle (default /var/lib/moodle_proctor/worker.json)
+
 Usage:
+  python worker.py
   python worker.py --storage /mnt/storage/campus.ejemplo.cl
   python analyze_faces.py --image /path/snap.jpg --output /path/result.json
 """
@@ -14,12 +20,53 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("moodle_proctor")
+
+DEFAULT_CONFIG_FILE = Path("/var/lib/moodle_proctor/worker.json")
+
+
+def load_storage_from_moodle_config(config_path: Path) -> Path | None:
+    """Read storage path exported by local_moodle_proctor."""
+    if not config_path.is_file():
+        return None
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Invalid worker config %s: %s", config_path, exc)
+        return None
+    storage = (data.get("storage") or "").strip()
+    if not storage:
+        return None
+    logger.info("Using storage from Moodle config %s (updated %s)", config_path, data.get("updated"))
+    return Path(storage)
+
+
+def resolve_storage(cli_storage: str | None, config_file: Path | None) -> Path:
+    """Resolve shared storage root from CLI, env, or Moodle-written JSON."""
+    if cli_storage:
+        return Path(cli_storage)
+
+    env_storage = os.environ.get("MOODLE_PROCTOR_STORAGE", "").strip()
+    if env_storage:
+        return Path(env_storage)
+
+    config_path = config_file or DEFAULT_CONFIG_FILE
+    moodle_storage = load_storage_from_moodle_config(config_path)
+    if moodle_storage is not None:
+        return moodle_storage
+
+    raise SystemExit(
+        "No storage path configured. Either:\n"
+        "  • Save Moodle Proctor settings (writes worker.json), or\n"
+        "  • Pass --storage /path, or\n"
+        "  • Set MOODLE_PROCTOR_STORAGE environment variable."
+    )
 
 
 def detect_faces(image_path: Path) -> dict:
@@ -80,11 +127,23 @@ def run_worker(storage: Path, interval: float = 5.0) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Moodle Proctor Python worker")
-    parser.add_argument("--storage", required=True, help="Shared storage root (same as Moodle setting)")
+    parser.add_argument(
+        "--storage",
+        default=None,
+        help="Shared storage root (optional if Moodle worker.json exists)",
+    )
+    parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG_FILE),
+        help="Moodle worker JSON path (default: /var/lib/moodle_proctor/worker.json)",
+    )
     parser.add_argument("--once", action="store_true", help="Process queue once and exit")
     parser.add_argument("--interval", type=float, default=5.0, help="Poll interval seconds")
     args = parser.parse_args()
-    storage = Path(args.storage)
+
+    config_file = Path(args.config) if args.config else DEFAULT_CONFIG_FILE
+    storage = resolve_storage(args.storage, config_file)
+    logger.info("Storage root: %s", storage)
 
     if args.once:
         queue = storage / "analysis_queue"
