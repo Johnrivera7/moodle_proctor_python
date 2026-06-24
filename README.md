@@ -15,13 +15,27 @@ Worker **independiente** para análisis facial (conteo de rostros en capturas). 
 | **Contacto** | [johnriveragonzalez7@gmail.com](mailto:johnriveragonzalez7@gmail.com) |
 | **Repositorio** | https://github.com/Johnrivera7/moodle_proctor_python |
 | **Rama** | **`MOODLE_52`** |
-| **Integración** | Cola JSON en disco + `worker.json` generado por Moodle |
+| **Integración** | Cola JSON en disco compartido + `worker.json` (sin API HTTP) |
+
+> 🐍 **Repo separado a propósito** — proceso aparte de PHP/Moodle; puede correr en el **mismo servidor** o en cualquier máquina que monte la **misma ruta compartida** (da igual el proveedor cloud).
 
 > Moodle 4.5: rama [`MOODLE_45`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_45)
 
 ---
 
-## Cómo se integra (cola JSON en disco)
+## Nombrado de archivos (IDs, no hashes)
+
+Python **no busca archivos por hash**. Moodle escribe un `job_{snapshotid}.json` que apunta a la imagen por ruta absoluta:
+
+| Qué | Nombre | Significado |
+|-----|--------|-------------|
+| Captura quiz | `sessions/{course}/{quiz}/{attempt}/snap_0003.jpg` | Secuencia del intento |
+| Job | `analysis_queue/job_42.json` | `snapshotid = 42` en Moodle |
+| Resultado | `analysis_results/result_42.json` | Mismo ID de snapshot |
+
+El worker lee `image` del JSON, cuenta rostros con OpenCV y escribe `face_count` / `alert` en el result. El cron de Moodle enlaza todo por `snapshotid`.
+
+---
 
 **No hay API HTTP.** Moodle y Python se comunican solo con archivos en la **misma ruta montada** — da igual si es disco local, NFS, NAS u otro almacenamiento compartido.
 
