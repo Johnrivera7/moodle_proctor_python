@@ -4,17 +4,45 @@
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B-green?style=flat-square)](https://opencv.org)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 [![Moodle](https://img.shields.io/badge/Integrates-local__moodle__proctor-orange?style=flat-square&logo=moodle)](https://github.com/Johnrivera7/moodle_proctor)
+[![Branch](https://img.shields.io/badge/Branch-MOODLE__45-green?style=flat-square)](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_45)
 [![Deploy](https://img.shields.io/badge/Deploy-systemd%20%7C%20cron-lightgrey?style=flat-square)](#systemd-recomendado)
 
-Worker **independiente** para análisis facial en snapshots. Se comunica con Moodle **solo vía disco compartido (SFS)** — no es un plugin Moodle.
+Worker **independiente** para análisis facial en capturas. Se comunica con Moodle **solo por archivos en disco compartido** — no es un plugin Moodle ni expone HTTP.
 
 | | |
 |---|---|
 | **Repositorio** | https://github.com/Johnrivera7/moodle_proctor_python |
 | **Autor** | [John Rivera](https://github.com/Johnrivera7) |
-| **Integración** | Cola JSON en Huawei SFS |
+| **Integración** | Cola JSON en disco compartido (misma ruta que Moodle) |
 
-> 🐍 **Separado a propósito** — corre en el servidor Huawei, no dentro de PHP/Moodle.
+> 🐍 **Repo separado a propósito** — proceso aparte de PHP/Moodle; corre en el **mismo servidor** o en cualquier máquina con la **misma ruta montada** (AWS, Azure, GCP, NFS, local, etc.).
+
+> Moodle 5.2+: rama [`MOODLE_52`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_52) con sync automático `worker.json`.
+
+---
+
+## Cómo funciona (IDs, no hashes)
+
+Python **no busca imágenes por hash**. Moodle escribe `job_{snapshotid}.json` con la ruta absoluta de la captura:
+
+```mermaid
+sequenceDiagram
+    participant M as Moodle
+    participant D as Disco compartido
+    participant W as worker.py
+
+    M->>D: sessions/.../snap_0003.jpg
+    M->>D: analysis_queue/job_42.json
+    W->>D: Lee JSON → abre image
+    W->>D: analysis_results/result_42.json
+    M->>D: Cron importa por snapshotid 42
+```
+
+| Archivo | Ejemplo |
+|---------|---------|
+| Captura | `sessions/3/7/12/snap_0003.jpg` |
+| Job | `analysis_queue/job_42.json` |
+| Resultado | `analysis_results/result_42.json` |
 
 ---
 
@@ -23,9 +51,9 @@ Worker **independiente** para análisis facial en snapshots. Se comunica con Moo
 | Requisito | Versión |
 |-----------|---------|
 | Python | 3.9+ |
-| pip | Cualquier reciente |
 | OpenCV | `opencv-python-headless` ≥ 4.8 |
-| SFS | Misma ruta que `local_moodle_proctor` → Storage path |
+| Disco compartido | **Misma ruta** que Storage path en Moodle |
+| Usuario del servicio | Lectura/escritura en esa ruta (`www-data`) |
 
 ---
 
@@ -48,7 +76,7 @@ pip install -r requirements.txt
 - ✅ **Enable face analysis**
 - ✅ **Enable Python analysis queue**
 
-La ruta SFS debe ser **idéntica** en Moodle y en el worker.
+La ruta de almacenamiento debe ser **idéntica** en Moodle y en el worker (`--storage`).
 
 ---
 
@@ -57,20 +85,20 @@ La ruta SFS debe ser **idéntica** en Moodle y en el worker.
 ### Daemon continuo
 
 ```bash
-python worker.py --storage /mnt/huawei-sfs/proctor
+python worker.py --storage /mnt/proctor
 ```
 
 ### Una pasada (cron cada minuto)
 
 ```bash
-python worker.py --storage /mnt/huawei-sfs/proctor --once
+python worker.py --storage /mnt/proctor --once
 ```
 
 ### Análisis manual
 
 ```bash
 python analyze_faces.py \
-  --image /mnt/huawei-sfs/proctor/sessions/1/2/3/snap_0001.jpg \
+  --image /mnt/proctor/sessions/1/2/3/snap_0001.jpg \
   --output /tmp/result.json
 ```
 
@@ -80,25 +108,9 @@ python analyze_faces.py \
 
 ```bash
 sudo cp moodle-proctor-worker.service /etc/systemd/system/
-# Editar ExecStart con tu ruta SFS y venv
+# Editar ExecStart: ruta --storage y venv
 sudo systemctl enable --now moodle-proctor-worker
 sudo systemctl status moodle-proctor-worker
-```
-
----
-
-## Flujo de datos
-
-```
-Moodle guarda snap.jpg
-       ↓
-Escribe analysis_queue/job_{id}.json
-       ↓
-Python worker procesa imagen
-       ↓
-Escribe analysis_results/result_{id}.json
-       ↓
-Tarea programada Moodle importa face_count
 ```
 
 ---
