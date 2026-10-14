@@ -2,24 +2,24 @@
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.8%2B-green?style=flat-square)](https://opencv.org)
-[![Moodle](https://img.shields.io/badge/Moodle-5.2%2B-orange?style=flat-square&logo=moodle)](https://moodle.org)
-[![Branch](https://img.shields.io/badge/Branch-MOODLE__52-green?style=flat-square)](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_52)
-[![Version](https://img.shields.io/badge/Suite-1.4.1-informational?style=flat-square)](https://github.com/Johnrivera7/moodle_proctor)
+[![Moodle](https://img.shields.io/badge/Moodle-5.3-orange?style=flat-square&logo=moodle)](https://moodle.org)
+[![Branch](https://img.shields.io/badge/Branch-MOODLE__53-green?style=flat-square)](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_53)
+[![Version](https://img.shields.io/badge/Suite-1.6.4-informational?style=flat-square)](https://github.com/Johnrivera7/moodle_proctor)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE)
 
-Worker **independiente** para análisis facial (conteo de rostros en capturas). Compatible con **`local_moodle_proctor`** rama **MOODLE_52** (Moodle 5.2+ / PHP 8.5+).
+Worker **independiente** para análisis facial (conteo de rostros en capturas). Compatible con **`local_moodle_proctor`** rama **MOODLE_53** (Moodle 5.3 / PHP 8.3+). Desde la v1.5 el núcleo trae Python embebido: este repositorio solo hace falta si se desactiva ese modo.
 
 | | |
 |---|---|
 | **Autor** | [John Rivera](https://github.com/Johnrivera7) |
 | **Contacto** | [johnriveragonzalez7@gmail.com](mailto:johnriveragonzalez7@gmail.com) |
 | **Repositorio** | https://github.com/Johnrivera7/moodle_proctor_python |
-| **Rama** | **`MOODLE_52`** |
+| **Rama** | **`MOODLE_53`** |
 | **Integración** | Cola JSON en disco compartido + `worker.json` (sin API HTTP) |
 
 > 🐍 **Repo separado a propósito** — proceso aparte de PHP/Moodle; puede correr en el **mismo servidor** o en cualquier máquina que monte la **misma ruta compartida** (da igual el proveedor cloud).
 
-> Moodle 4.5: rama [`MOODLE_45`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_45)
+> Moodle 5.2: rama [`MOODLE_52`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_52). Moodle 4.5: rama [`MOODLE_45`](https://github.com/Johnrivera7/moodle_proctor_python/tree/MOODLE_45).
 
 ---
 
@@ -128,7 +128,7 @@ El worker **no expone puertos**. Lee/escribe archivos en la carpeta que Moodle c
 |-----------|---------|
 | Python | 3.9+ |
 | OpenCV | `opencv-python-headless` ≥ 4.8 |
-| Moodle (suite) | **5.2+** con [`local_moodle_proctor`](https://github.com/Johnrivera7/moodle_proctor) **v1.4.1+** |
+| Moodle (suite) | **5.3** con [`local_moodle_proctor`](https://github.com/Johnrivera7/moodle_proctor/tree/MOODLE_53) **v1.6.4** |
 | Disco compartido | Misma ruta resuelta que Moodle (lectura/escritura `www-data`) |
 | `worker.json` | Generado por Moodle al guardar ajustes |
 
@@ -147,7 +147,7 @@ sudo chmod 770 /var/lib/moodle_proctor /mnt/storage
 ### 2 · Clonar e instalar dependencias
 
 ```bash
-sudo git clone -b MOODLE_52 https://github.com/Johnrivera7/moodle_proctor_python.git /opt/moodle_proctor_python
+sudo git clone -b MOODLE_53 https://github.com/Johnrivera7/moodle_proctor_python.git /opt/moodle_proctor_python
 cd /opt/moodle_proctor_python
 sudo python3 -m venv venv
 sudo ./venv/bin/pip install -r requirements.txt
@@ -198,7 +198,7 @@ sudo journalctl -u moodle-proctor-worker -f
 ## Desarrollo local
 
 ```bash
-git clone -b MOODLE_52 https://github.com/Johnrivera7/moodle_proctor_python.git
+git clone -b MOODLE_53 https://github.com/Johnrivera7/moodle_proctor_python.git
 cd moodle_proctor_python
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
@@ -220,17 +220,17 @@ sudo chmod -R 750 /opt/moodle_proctor_python
 
 ---
 
-## Suite MOODLE_52
+## Suite MOODLE_53
 
 | Repo | Rol |
 |------|-----|
-| [moodle_proctor](https://github.com/Johnrivera7/moodle_proctor/tree/MOODLE_52) | Cola + `worker.json` |
+| [moodle_proctor](https://github.com/Johnrivera7/moodle_proctor/tree/MOODLE_53) | Cola + `worker.json` |
 | **moodle_proctor_python** | ← Worker |
-| [moodle_quizaccess_proctor](https://github.com/Johnrivera7/moodle_quizaccess_proctor/tree/MOODLE_52) | Capturas |
-| [moodle_block_proctor](https://github.com/Johnrivera7/moodle_block_proctor/tree/MOODLE_52) | Bloque |
-| [moodle_proctor_extension](https://github.com/Johnrivera7/moodle_proctor_extension/tree/MOODLE_52) | Extensión |
+| [moodle_quizaccess_proctor](https://github.com/Johnrivera7/moodle_quizaccess_proctor/tree/MOODLE_53) | Capturas |
+| [moodle_block_proctor](https://github.com/Johnrivera7/moodle_block_proctor/tree/MOODLE_53) | Bloque |
+| [moodle_proctor_extension](https://github.com/Johnrivera7/moodle_proctor_extension/tree/MOODLE_53) | Extensión |
 
-Diagramas completos de arquitectura: [README del núcleo](https://github.com/Johnrivera7/moodle_proctor/blob/MOODLE_52/README.md).
+Diagramas completos de arquitectura: [README del núcleo](https://github.com/Johnrivera7/moodle_proctor/blob/MOODLE_53/README.md).
 
 ---
 
